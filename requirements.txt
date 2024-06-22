@@ -1,3 +1,5 @@
+Pillow
+mss
 opencv-python
 langchain
 langchain-openai

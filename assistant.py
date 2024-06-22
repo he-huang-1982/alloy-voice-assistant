@@ -1,16 +1,16 @@
 """
-This script implements a real-time audio-visual assistant using a webcam and microphone.
-It captures video, listens for audio input, processes the input using either GPT-4o or Claude 3.5 Sonnet,
+This script implements a real-time audio-visual assistant using screen capture and microphone input.
+It captures screenshots, listens for audio input, processes the input using either GPT-4o or Claude 3.5 Sonnet,
 and provides spoken responses.
 
 The assistant is capable of understanding spoken German input and responding in German,
-while also considering visual context from the webcam feed.
+while also considering visual context from the screen capture.
 
 Usage:
     python script_name.py --model [gpt4o|claude]
 
 Dependencies:
-- OpenCV (cv2) for webcam handling
+- mss for screen capture
 - PyAudio for audio output
 - SpeechRecognition for audio input processing
 - LangChain for AI model integration
@@ -23,11 +23,10 @@ Make sure to set up the necessary API keys in your environment variables or .env
 
 import argparse
 import base64
-from threading import Lock, Thread
+from io import BytesIO
 
-import cv2
 import openai
-from cv2 import VideoCapture, imencode
+from PIL import Image
 from dotenv import load_dotenv
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.schema.messages import SystemMessage
@@ -36,71 +35,41 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
+from mss import mss
 from pyaudio import PyAudio, paInt16
 from speech_recognition import Microphone, Recognizer, UnknownValueError
 
 # Load environment variables from .env file
 load_dotenv()
 
-class WebcamStream:
+class ScreenCapture:
     """
-    A class to handle webcam streaming in a separate thread.
-    This allows for non-blocking webcam reads.
+    A class to handle screen capturing.
     """
 
     def __init__(self):
-        """Initialize the WebcamStream with default settings."""
-        self.stream = VideoCapture(index=0)  # Open default camera
-        _, self.frame = self.stream.read()  # Read first frame
-        self.running = False
-        self.lock = Lock()  # For thread-safe operations
+        """Initialize the ScreenCapture with mss instance."""
+        self.sct = mss()
 
-    def start(self):
-        """Start the webcam stream in a separate thread."""
-        if self.running:
-            return self
-
-        self.running = True
-        self.thread = Thread(target=self.update, args=())
-        self.thread.start()
-        return self
-
-    def update(self):
-        """Continuously update the frame from the webcam."""
-        while self.running:
-            _, frame = self.stream.read()
-            with self.lock:
-                self.frame = frame
-
-    def read(self, encode=False):
+    def capture(self, encode=False):
         """
-        Read the current frame from the webcam.
+        Capture the entire screen.
 
         Args:
-            encode (bool): If True, encode the frame as base64 JPEG.
+            encode (bool): If True, encode the image as base64 JPEG.
 
         Returns:
-            numpy.ndarray or bytes: The current frame or its base64 encoded version.
+            PIL.Image or bytes: The captured screen image or its base64 encoded version.
         """
-        with self.lock:
-            frame = self.frame.copy()
+        screenshot = self.sct.grab(self.sct.monitors[0])
+        img = Image.frombytes("RGB", screenshot.size, screenshot.rgb)
 
         if encode:
-            _, buffer = imencode(".jpeg", frame)
-            return base64.b64encode(buffer)
+            buffered = BytesIO()
+            img.save(buffered, format="JPEG")
+            return base64.b64encode(buffered.getvalue())
 
-        return frame
-
-    def stop(self):
-        """Stop the webcam stream and wait for the thread to finish."""
-        self.running = False
-        if self.thread.is_alive():
-            self.thread.join()
-
-    def __exit__(self, exc_type, exc_value, exc_traceback):
-        """Release the webcam when the object is destroyed."""
-        self.stream.release()
-
+        return img
 
 class Assistant:
     """
@@ -119,11 +88,11 @@ class Assistant:
 
     def answer(self, prompt, image):
         """
-        Process the user's prompt and webcam image to generate a response.
+        Process the user's prompt and screen capture to generate a response.
 
         Args:
             prompt (str): The user's spoken input, transcribed to text.
-            image (bytes): Base64 encoded image from the webcam.
+            image (bytes): Base64 encoded image from the screen capture.
         """
         if not prompt:
             return
@@ -171,7 +140,8 @@ class Assistant:
         """
         SYSTEM_PROMPT = """
         You are a witty assistant that will use the chat history and the image 
-        provided by the user to answer its questions.
+        provided by the user to answer its questions. The image is a screenshot
+        of the user's entire screen.
 
         Use few words on your answers. Go straight to the point. Do not use any
         emoticons or emojis. Do not ask the user any questions.
@@ -215,7 +185,7 @@ def parse_arguments():
     Returns:
         argparse.Namespace: Parsed arguments
     """
-    parser = argparse.ArgumentParser(description="AI Assistant with webcam and microphone input.")
+    parser = argparse.ArgumentParser(description="AI Assistant with screen capture and microphone input.")
     parser.add_argument('--model', type=str, choices=['gpt4o', 'claude'], default='claude',
                         help="Specify the model to use: 'gpt4o' for GPT-4o or 'claude' for Claude 3.5 Sonnet")
     return parser.parse_args()
@@ -241,8 +211,8 @@ def main():
     """
     args = parse_arguments()
 
-    # Initialize the webcam stream
-    webcam_stream = WebcamStream().start()
+    # Initialize the screen capture
+    screen_capture = ScreenCapture()
 
     # Initialize the chosen model
     model = initialize_model(args.model)
@@ -262,8 +232,8 @@ def main():
         try:
             # Transcribe the audio using Whisper
             prompt = recognizer.recognize_whisper(audio, model="base", language="german")
-            # Process the transcribed text and webcam image
-            assistant.answer(prompt, webcam_stream.read(encode=True))
+            # Process the transcribed text and screen capture
+            assistant.answer(prompt, screen_capture.capture(encode=True))
 
         except UnknownValueError:
             print("There was an error processing the audio.")
@@ -277,15 +247,16 @@ def main():
     # Start listening for audio input in the background
     stop_listening = recognizer.listen_in_background(microphone, audio_callback)
 
-    # Main loop to display webcam feed and handle user input
-    while True:
-        cv2.imshow("webcam", webcam_stream.read())
-        if cv2.waitKey(1) in [27, ord("q")]:  # Exit on 'Esc' or 'q' key press
-            break
+    print("AI Assistant is running. Speak in German to interact. Press Ctrl+C to exit.")
+
+    try:
+        # Keep the main thread alive
+        while True:
+            pass
+    except KeyboardInterrupt:
+        print("Stopping the AI Assistant...")
 
     # Clean up resources
-    webcam_stream.stop()
-    cv2.destroyAllWindows()
     stop_listening(wait_for_stop=False)
 
 if __name__ == "__main__":
