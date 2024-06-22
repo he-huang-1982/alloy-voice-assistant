@@ -2,6 +2,7 @@ opencv-python
 langchain
 langchain-openai
 langchain_google_genai
+langchain-anthropic
 langchain-community
 python-dotenv
 pyaudio
