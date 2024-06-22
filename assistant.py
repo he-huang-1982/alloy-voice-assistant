@@ -24,6 +24,7 @@ Make sure to set up the necessary API keys in your environment variables or .env
 import argparse
 import base64
 from io import BytesIO
+import time
 
 import openai
 from PIL import Image
@@ -49,7 +50,7 @@ class ScreenCapture:
 
     def __init__(self):
         """Initialize the ScreenCapture with mss instance."""
-        self.sct = mss()
+        pass
 
     def capture(self, encode=False):
         """
@@ -61,15 +62,16 @@ class ScreenCapture:
         Returns:
             PIL.Image or bytes: The captured screen image or its base64 encoded version.
         """
-        screenshot = self.sct.grab(self.sct.monitors[0])
-        img = Image.frombytes("RGB", screenshot.size, screenshot.rgb)
+        with mss() as sct:
+            screenshot = sct.grab(sct.monitors[0])
+            img = Image.frombytes("RGB", screenshot.size, screenshot.rgb)
 
-        if encode:
-            buffered = BytesIO()
-            img.save(buffered, format="JPEG")
-            return base64.b64encode(buffered.getvalue())
+            if encode:
+                buffered = BytesIO()
+                img.save(buffered, format="JPEG")
+                return base64.b64encode(buffered.getvalue())
 
-        return img
+            return img
 
 class Assistant:
     """
@@ -252,7 +254,7 @@ def main():
     try:
         # Keep the main thread alive
         while True:
-            pass
+            time.sleep(0.1)
     except KeyboardInterrupt:
         print("Stopping the AI Assistant...")
 
