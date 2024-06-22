@@ -79,13 +79,14 @@ class Assistant:
     and providing spoken responses.
     """
 
-    def __init__(self, model):
+    def __init__(self, model, language):
         """
         Initialize the Assistant with a specified language model.
 
         Args:
             model: An instance of a language model compatible with LangChain.
         """
+        self.language = language
         self.chain = self._create_inference_chain(model)
 
     def answer(self, prompt, image):
@@ -140,7 +141,7 @@ class Assistant:
         Returns:
             RunnableWithMessageHistory: A LangChain runnable chain with message history.
         """
-        SYSTEM_PROMPT = """
+        SYSTEM_PROMPT = f"""
         You are a witty assistant that will use the chat history and the image 
         provided by the user to answer its questions. The image is a screenshot
         of the user's entire screen.
@@ -150,7 +151,7 @@ class Assistant:
 
         Be friendly and helpful. Show some personality. Do not be too formal.
         
-        Always answer in German.
+        Always answer in {self.language}.
         """
 
         prompt_template = ChatPromptTemplate.from_messages(
@@ -190,6 +191,8 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="AI Assistant with screen capture and microphone input.")
     parser.add_argument('--model', type=str, choices=['gpt4o', 'claude'], default='claude',
                         help="Specify the model to use: 'gpt4o' for GPT-4o or 'claude' for Claude 3.5 Sonnet")
+    parser.add_argument('--language', type=str, choices=['english', 'german', 'chinese'], default='english',
+                        help="Specify the language for input and output: 'english', 'german', or 'chinese'")
     return parser.parse_args()
 
 def initialize_model(model_choice):
@@ -219,9 +222,10 @@ def main():
     # Initialize the chosen model
     model = initialize_model(args.model)
     print(f"Using model: {args.model}")
+    print(f"Using language: {args.language}")
 
     # Create an instance of the Assistant
-    assistant = Assistant(model)
+    assistant = Assistant(model, args.language)
 
     def audio_callback(recognizer, audio):
         """
@@ -233,7 +237,7 @@ def main():
         """
         try:
             # Transcribe the audio using Whisper
-            prompt = recognizer.recognize_whisper(audio, model="base", language="german")
+            prompt = recognizer.recognize_whisper(audio, model="base", language=args.language)
             # Process the transcribed text and screen capture
             assistant.answer(prompt, screen_capture.capture(encode=True))
 
@@ -249,7 +253,7 @@ def main():
     # Start listening for audio input in the background
     stop_listening = recognizer.listen_in_background(microphone, audio_callback)
 
-    print("AI Assistant is running. Speak in German to interact. Press Ctrl+C to exit.")
+    print(f"AI Assistant is running. Speak in {args.language} to interact. Press Ctrl+C to exit.")
 
     try:
         # Keep the main thread alive
