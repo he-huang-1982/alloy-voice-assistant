@@ -10,8 +10,7 @@ from langchain.schema.messages import SystemMessage
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_openai import ChatOpenAI
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_anthropic import ChatAnthropic
 from pyaudio import PyAudio, paInt16
 from speech_recognition import Microphone, Recognizer, UnknownValueError
 
@@ -138,11 +137,8 @@ class Assistant:
 
 webcam_stream = WebcamStream().start()
 
-#model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest")
-
-# You can use OpenAI's GPT-4o model instead of Gemini Flash
-# by uncommenting the following line:
-model = ChatOpenAI(model="gpt-4o")
+# Use Claude 3.5 Sonnet
+model = ChatAnthropic(model="claude-3-sonnet-20240229")
 
 assistant = Assistant(model)
 
