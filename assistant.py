@@ -104,6 +104,8 @@ class Assistant:
         emoticons or emojis. Do not ask the user any questions.
 
         Be friendly and helpful. Show some personality. Do not be too formal.
+        
+        Always answer in German.
         """
 
         prompt_template = ChatPromptTemplate.from_messages(
@@ -136,18 +138,18 @@ class Assistant:
 
 webcam_stream = WebcamStream().start()
 
-model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest")
+#model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest")
 
 # You can use OpenAI's GPT-4o model instead of Gemini Flash
 # by uncommenting the following line:
-# model = ChatOpenAI(model="gpt-4o")
+model = ChatOpenAI(model="gpt-4o")
 
 assistant = Assistant(model)
 
 
 def audio_callback(recognizer, audio):
     try:
-        prompt = recognizer.recognize_whisper(audio, model="base", language="english")
+        prompt = recognizer.recognize_whisper(audio, model="base", language="german")
         assistant.answer(prompt, webcam_stream.read(encode=True))
 
     except UnknownValueError:
