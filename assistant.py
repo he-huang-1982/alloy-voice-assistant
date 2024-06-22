@@ -1,23 +1,27 @@
 """
 This script implements a real-time audio-visual assistant using a webcam and microphone.
-It captures video, listens for audio input, processes the input using Claude 3.5 Sonnet,
+It captures video, listens for audio input, processes the input using either GPT-4o or Claude 3.5 Sonnet,
 and provides spoken responses.
 
 The assistant is capable of understanding spoken German input and responding in German,
 while also considering visual context from the webcam feed.
+
+Usage:
+    python script_name.py --model [gpt4o|claude]
 
 Dependencies:
 - OpenCV (cv2) for webcam handling
 - PyAudio for audio output
 - SpeechRecognition for audio input processing
 - LangChain for AI model integration
-- Anthropic's Claude 3.5 Sonnet for natural language processing
+- OpenAI's GPT-4o or Anthropic's Claude 3.5 Sonnet for natural language processing
 - OpenAI's Whisper for speech recognition
 - OpenAI's TTS for text-to-speech conversion
 
 Make sure to set up the necessary API keys in your environment variables or .env file.
 """
 
+import argparse
 import base64
 from threading import Lock, Thread
 
@@ -30,13 +34,13 @@ from langchain.schema.messages import SystemMessage
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from pyaudio import PyAudio, paInt16
 from speech_recognition import Microphone, Recognizer, UnknownValueError
 
 # Load environment variables from .env file
 load_dotenv()
-
 
 class WebcamStream:
     """
@@ -147,10 +151,10 @@ class Assistant:
         player = PyAudio().open(format=paInt16, channels=1, rate=24000, output=True)
 
         with openai.audio.speech.with_streaming_response.create(
-                model="tts-1",
-                voice="alloy",
-                response_format="pcm",
-                input=response,
+            model="tts-1",
+            voice="alloy",
+            response_format="pcm",
+            input=response,
         ) as stream:
             for chunk in stream.iter_bytes(chunk_size=1024):
                 player.write(chunk)
@@ -173,7 +177,7 @@ class Assistant:
         emoticons or emojis. Do not ask the user any questions.
 
         Be friendly and helpful. Show some personality. Do not be too formal.
-
+        
         Always answer in German.
         """
 
@@ -204,51 +208,85 @@ class Assistant:
             history_messages_key="chat_history",
         )
 
-
-# Initialize the webcam stream
-webcam_stream = WebcamStream().start()
-
-# Initialize the Claude 3.5 Sonnet model
-model = ChatAnthropic(model="claude-3-sonnet-20240229")
-
-# Create an instance of the Assistant
-assistant = Assistant(model)
-
-
-def audio_callback(recognizer, audio):
+def parse_arguments():
     """
-    Callback function to process audio input.
+    Parse command-line arguments.
+
+    Returns:
+        argparse.Namespace: Parsed arguments
+    """
+    parser = argparse.ArgumentParser(description="AI Assistant with webcam and microphone input.")
+    parser.add_argument('--model', type=str, choices=['gpt4o', 'claude'], default='claude',
+                        help="Specify the model to use: 'gpt4o' for GPT-4o or 'claude' for Claude 3.5 Sonnet")
+    return parser.parse_args()
+
+def initialize_model(model_choice):
+    """
+    Initialize and return the specified language model.
 
     Args:
-        recognizer (speech_recognition.Recognizer): The speech recognizer object.
-        audio (speech_recognition.AudioData): The captured audio data.
+        model_choice (str): The model choice ('gpt4o' or 'claude')
+
+    Returns:
+        LangChain compatible model instance
     """
-    try:
-        # Transcribe the audio using Whisper
-        prompt = recognizer.recognize_whisper(audio, model="base", language="german")
-        # Process the transcribed text and webcam image
-        assistant.answer(prompt, webcam_stream.read(encode=True))
+    if model_choice == 'gpt4o':
+        return ChatOpenAI(model="gpt-4o")
+    else:  # 'claude'
+        return ChatAnthropic(model="claude-3-sonnet-20240229")
 
-    except UnknownValueError:
-        print("There was an error processing the audio.")
+def main():
+    """
+    Main function to run the AI assistant.
+    """
+    args = parse_arguments()
 
+    # Initialize the webcam stream
+    webcam_stream = WebcamStream().start()
 
-# Set up the speech recognizer and microphone
-recognizer = Recognizer()
-microphone = Microphone()
-with microphone as source:
-    recognizer.adjust_for_ambient_noise(source)
+    # Initialize the chosen model
+    model = initialize_model(args.model)
+    print(f"Using model: {args.model}")
 
-# Start listening for audio input in the background
-stop_listening = recognizer.listen_in_background(microphone, audio_callback)
+    # Create an instance of the Assistant
+    assistant = Assistant(model)
 
-# Main loop to display webcam feed and handle user input
-while True:
-    cv2.imshow("webcam", webcam_stream.read())
-    if cv2.waitKey(1) in [27, ord("q")]:  # Exit on 'Esc' or 'q' key press
-        break
+    def audio_callback(recognizer, audio):
+        """
+        Callback function to process audio input.
 
-# Clean up resources
-webcam_stream.stop()
-cv2.destroyAllWindows()
-stop_listening(wait_for_stop=False)
+        Args:
+            recognizer (speech_recognition.Recognizer): The speech recognizer object.
+            audio (speech_recognition.AudioData): The captured audio data.
+        """
+        try:
+            # Transcribe the audio using Whisper
+            prompt = recognizer.recognize_whisper(audio, model="base", language="german")
+            # Process the transcribed text and webcam image
+            assistant.answer(prompt, webcam_stream.read(encode=True))
+
+        except UnknownValueError:
+            print("There was an error processing the audio.")
+
+    # Set up the speech recognizer and microphone
+    recognizer = Recognizer()
+    microphone = Microphone()
+    with microphone as source:
+        recognizer.adjust_for_ambient_noise(source)
+
+    # Start listening for audio input in the background
+    stop_listening = recognizer.listen_in_background(microphone, audio_callback)
+
+    # Main loop to display webcam feed and handle user input
+    while True:
+        cv2.imshow("webcam", webcam_stream.read())
+        if cv2.waitKey(1) in [27, ord("q")]:  # Exit on 'Esc' or 'q' key press
+            break
+
+    # Clean up resources
+    webcam_stream.stop()
+    cv2.destroyAllWindows()
+    stop_listening(wait_for_stop=False)
+
+if __name__ == "__main__":
+    main()
