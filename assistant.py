@@ -291,10 +291,9 @@ def main():
     print(f"AI Assistant is running. Speak in {args.language} to interact.")
     print("Press Ctrl+C to exit. Press ESC to stop audio playback.")
 
+    # Keep the main thread alive
     try:
-        # Keep the main thread alive
-        while True:
-            time.sleep(0.1)
+        keyboard.wait('ctrl+c')
     except KeyboardInterrupt:
         print("Stopping the AI Assistant...")
 
