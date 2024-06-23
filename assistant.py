@@ -25,6 +25,8 @@ import argparse
 import base64
 from io import BytesIO
 import time
+import threading
+import keyboard
 
 import openai
 from PIL import Image
@@ -90,6 +92,7 @@ class Assistant:
         """
         self.language = language
         self.chain = self._create_inference_chain(model)
+        self.stop_playback = threading.Event()
 
     def answer(self, prompt, image):
         """
@@ -128,6 +131,11 @@ class Assistant:
         """
         player = PyAudio().open(format=paInt16, channels=1, rate=24000, output=True)
 
+        # Reset the stop_playback event
+        self.stop_playback.clear()
+        # Start a thread to listen for the ESC key
+        threading.Thread(target=self._listen_for_esc, daemon=True).start()
+
         with openai.audio.speech.with_streaming_response.create(
             model="tts-1",
             voice="alloy",
@@ -135,7 +143,15 @@ class Assistant:
             input=response,
         ) as stream:
             for chunk in stream.iter_bytes(chunk_size=1024):
+                if self.stop_playback.is_set():
+                    print("Playback interrupted by user")
+                    break
                 player.write(chunk)
+
+    def _listen_for_esc(self):
+        """ Listen for ESC key press and set the stop_playback event """
+        keyboard.wait('esc')
+        self.stop_playback.set()
 
     def _create_inference_chain(self, model):
         """
@@ -272,7 +288,8 @@ def main():
     # Start listening for audio input in the background
     stop_listening = recognizer.listen_in_background(microphone, audio_callback)
 
-    print(f"AI Assistant is running. Speak in {args.language} to interact. Press Ctrl+C to exit.")
+    print(f"AI Assistant is running. Speak in {args.language} to interact.")
+    print("Press Ctrl+C to exit. Press ESC to stop audio playback.")
 
     try:
         # Keep the main thread alive
