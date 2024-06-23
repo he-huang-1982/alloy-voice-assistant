@@ -1,20 +1,19 @@
 """
 This script implements a real-time audio-visual assistant using screen capture and microphone input.
-It captures screenshots, listens for audio input, processes the input using either GPT-4o or Claude 3.5 Sonnet,
-and provides spoken responses.
+It captures screenshots, listens for audio input, processes the input using either GPT-4o, Claude 3.5 Sonnet
+or Gemini 1.5 Flash, and provides spoken responses.
 
 The assistant is capable of understanding spoken German input and responding in German,
 while also considering visual context from the screen capture.
 
 Usage:
-    python script_name.py --model [gpt4o|claude]
-
+    python script_name.py --model [gpt4o|claude|gemini] --language [english|german|chinese]
 Dependencies:
 - mss for screen capture
 - PyAudio for audio output
 - SpeechRecognition for audio input processing
 - LangChain for AI model integration
-- OpenAI's GPT-4o or Anthropic's Claude 3.5 Sonnet for natural language processing
+- OpenAI's GPT-4o, Anthropic's Claude 3.5 Sonnet, or Google's Gemini 1.5 Flash for natural language processing
 - OpenAI's Whisper for speech recognition
 - OpenAI's TTS for text-to-speech conversion
 
@@ -36,6 +35,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
 from mss import mss
 from pyaudio import PyAudio, paInt16
 from speech_recognition import Microphone, Recognizer, UnknownValueError
@@ -148,8 +148,8 @@ class Assistant:
 
         Use few words on your answers. Go straight to the point. Do not use any
         emoticons or emojis. Do not ask the user any questions.
-
-        Be friendly and helpful. Show some personality. Do not be too formal.
+        
+        If the answer would be too long, summarise it.
         
         Always answer in {self.language}.
         """
@@ -189,8 +189,8 @@ def parse_arguments():
         argparse.Namespace: Parsed arguments
     """
     parser = argparse.ArgumentParser(description="AI Assistant with screen capture and microphone input.")
-    parser.add_argument('--model', type=str, choices=['gpt4o', 'claude'], default='claude',
-                        help="Specify the model to use: 'gpt4o' for GPT-4o or 'claude' for Claude 3.5 Sonnet")
+    parser.add_argument('--model', type=str, choices=['gpt4o', 'claude', 'gemini'], default='claude',
+                        help="Specify the model to use: 'gpt4o' for GPT-4o, 'claude' for Claude 3.5 Sonnet, or 'gemini' for Gemini 1.5 Flash")
     parser.add_argument('--language', type=str, choices=['english', 'german', 'chinese'], default='english',
                         help="Specify the language for input and output: 'english', 'german', or 'chinese'")
     return parser.parse_args()
@@ -200,15 +200,17 @@ def initialize_model(model_choice):
     Initialize and return the specified language model.
 
     Args:
-        model_choice (str): The model choice ('gpt4o' or 'claude')
+        model_choice (str): The model choice ('gpt4o', 'claude', or 'gemini')
 
     Returns:
         LangChain compatible model instance
     """
     if model_choice == 'gpt4o':
         return ChatOpenAI(model="gpt-4o")
-    else:  # 'claude'
+    elif model_choice == 'claude':
         return ChatAnthropic(model="claude-3-sonnet-20240229")
+    else:  # 'gemini'
+        return ChatGoogleGenerativeAI(model="gemini-1.5-flash")
 
 def main():
     """
