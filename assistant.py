@@ -1,6 +1,6 @@
 """
 This script implements a real-time audio-visual assistant using screen capture and microphone input.
-It captures screenshots, listens for audio input, processes the input using either GPT-4o, Claude 3.5 Sonnet
+It captures screenshots, listens for audio input, processes the input using either GPT-4o, Claude 3.5 Sonnet,
 or Gemini 1.5 Flash, and provides spoken responses.
 
 The assistant is capable of understanding spoken German input and responding in German,
@@ -8,6 +8,7 @@ while also considering visual context from the screen capture.
 
 Usage:
     python script_name.py --model [gpt4o|claude|gemini] --language [english|german|chinese]
+
 Dependencies:
 - mss for screen capture
 - PyAudio for audio output
@@ -85,6 +86,7 @@ class Assistant:
 
         Args:
             model: An instance of a language model compatible with LangChain.
+            language (str): The language for input and output.
         """
         self.language = language
         self.chain = self._create_inference_chain(model)
@@ -102,12 +104,16 @@ class Assistant:
 
         print("Prompt:", prompt)
 
+        # Time the response generation
+        start_time = time.time()
         # Generate a response using the language model
         response = self.chain.invoke(
             {"prompt": prompt, "image_base64": image.decode()},
             config={"configurable": {"session_id": "unused"}},
         ).strip()
+        end_time = time.time()
 
+        print(f"Response generation took {end_time - start_time:.2f} seconds")
         print("Response:", response)
 
         if response:
@@ -238,10 +244,21 @@ def main():
             audio (speech_recognition.AudioData): The captured audio data.
         """
         try:
+            # Time the screen capture
+            start_time = time.time()
+            image = screen_capture.capture(encode=True)
+            end_time = time.time()
+            print(f"Screen capture took {end_time - start_time:.2f} seconds")
+
+            # Time the audio transcription
+            start_time = time.time()
             # Transcribe the audio using Whisper
             prompt = recognizer.recognize_whisper(audio, model="base", language=args.language)
+            end_time = time.time()
+            print(f"Audio transcription took {end_time - start_time:.2f} seconds")
+
             # Process the transcribed text and screen capture
-            assistant.answer(prompt, screen_capture.capture(encode=True))
+            assistant.answer(prompt, image)
 
         except UnknownValueError:
             print("There was an error processing the audio.")
